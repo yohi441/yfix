@@ -72,4 +72,4 @@ pip install pyinstaller
 
 ## License
 
-MIT
+[MIT](LICENSE) © yohi441
