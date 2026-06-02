@@ -1507,7 +1507,7 @@ def show_about():
   Built with Python, psutil, and Tkinter.
   Compiled to standalone .exe via PyInstaller.
 
-  https://github.com/anomalyco/opencode
+  https://github.com/yohi441/yfix.git
 """)
 
 
