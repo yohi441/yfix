@@ -25,6 +25,8 @@ from pathlib import Path
 
 VERSION = "2.1"
 
+DRY_RUN = False  # Set to True to preview commands without executing
+
 
 # ── Utilities ──────────────────────────────────────────────────────────
 
@@ -37,6 +39,9 @@ def is_admin():
 
 
 def run_cmd(cmd, capture=True):
+    if DRY_RUN:
+        print(f"  [DRY-RUN] {cmd}")
+        return "" if capture else 0
     try:
         r = subprocess.run(cmd, capture_output=capture, text=True, shell=True, creationflags=subprocess.CREATE_NO_WINDOW if not capture else 0)
         return r.stdout.strip() if capture else r.returncode
@@ -52,6 +57,9 @@ def require_admin():
 
 def run_as_admin():
     """Relaunch with admin privileges via UAC prompt. Exits if UAC approved."""
+    if DRY_RUN:
+        print("  [DRY-RUN] Would attempt UAC admin elevation")
+        return
     if not is_admin():
         try:
             ret = ctypes.windll.shell32.ShellExecuteW(
@@ -90,6 +98,9 @@ def info(msg):
 
 
 def prompt_yesno(question):
+    if DRY_RUN:
+        print(f"  [DRY-RUN] {question} (auto-answering No)")
+        return False
     a = input(f"  {question} (y/n): ").strip().lower()
     return a in ("y", "yes")
 
@@ -240,8 +251,19 @@ def show_help():
       Pick a restore point by SequenceNumber and roll back
       Windows system files. PC will restart. Keeps your data.
 
-  28. About
+   28. About
       Version info, author, and credits.
+
+   29. System Benchmark (Speed Test)
+      Runs CPU (prime sieve), memory (200 MB throughput),
+      and disk (100 MB write/read) benchmarks.
+      Takes ~15 seconds, gives an overall score and rating.
+      Run before and after fixes to measure improvement!
+
+   30. Toggle Dry-Run Mode
+      When ON, all commands are printed but NOT executed.
+      Safe way to preview what each option does.
+      Also available via: python yfix.py --dry-run
 
   -- Tips for Speeding Up a Slow PC ----------------------
 
@@ -256,8 +278,12 @@ def show_help():
   7. Check memory health (option 12) if you get random crashes.
   8. If still slow -- consider an SSD upgrade (option 11 can
      check if you're on an HDD).
-  9. Last resort: repair install (option 23) -- reinstalls
-     Windows while keeping your files.
+   9. Last resort: repair install (option 23) -- reinstalls
+      Windows while keeping your files.
+  10. Run benchmark (option 29) BEFORE and AFTER fixes to
+      see real performance improvement measured in numbers!
+  11. Use Dry-Run mode (option 30 or --dry-run) to preview
+      what commands will run without actually executing them.
 """)
 
 
@@ -568,9 +594,12 @@ def repair_install():
     print("  4. Let it run (1-2 hours) -- PC will restart several times")
     print()
     if prompt_yesno("Open the download page in your browser?"):
-        import webbrowser
-        webbrowser.open("https://www.microsoft.com/software-download/windows11")
-        print("  Page opened.")
+        if DRY_RUN:
+            print("  [DRY-RUN] Would open: https://www.microsoft.com/software-download/windows11")
+        else:
+            import webbrowser
+            webbrowser.open("https://www.microsoft.com/software-download/windows11")
+            print("  Page opened.")
 
 
 # ── Why Is My PC Slow? (Comprehensive Diagnostic) ─────────────────────
@@ -853,11 +882,15 @@ def malware_scan():
     if defender and defender.exists():
         info("Scanning... this may take 5-10 minutes.")
         print("  (The scan runs silently in the background)")
-        r = subprocess.run(
-            [str(defender), "-Scan", "-ScanType", "1"],
-            capture_output=True, text=True, timeout=900
-        )
-        output = r.stdout + r.stderr
+        if DRY_RUN:
+            print(f"  [DRY-RUN] Would run: {str(defender)} -Scan -ScanType 1")
+            output = "dry-run: no threats found"
+        else:
+            r = subprocess.run(
+                [str(defender), "-Scan", "-ScanType", "1"],
+                capture_output=True, text=True, timeout=900
+            )
+            output = r.stdout + r.stderr
         if "no threats" in output.lower() or "no virus" in output.lower():
             ok("Windows Defender: No threats found")
         elif "threat" in output.lower():
@@ -912,6 +945,15 @@ def clean_temp():
         Path(os.environ.get("LOCALAPPDATA", "")) / "Temp",
         Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft" / "Windows" / "Recent",
     ]
+
+    if DRY_RUN:
+        print("  [DRY-RUN] Would delete contents of:")
+        for p in set(filter(None, paths)):
+            target = Path(p) if isinstance(p, str) else p
+            if target.exists():
+                print(f"    {target}")
+        print("  [DRY-RUN] Would run: cleanmgr /sagerun:1")
+        return
 
     total = 0
     for p in set(filter(None, paths)):
@@ -1299,6 +1341,9 @@ def get_browser_cache_size():
 
 
 def clean_browser_cache(which="all"):
+    if DRY_RUN:
+        print(f"  [DRY-RUN] Would clear browser caches: {which}")
+        return
     browsers_to_clean = BROWSER_CACHE_PATHS if which == "all" else {which: BROWSER_CACHE_PATHS.get(which, [])}
     for browser, paths in browsers_to_clean.items():
         for p in paths:
@@ -1535,6 +1580,124 @@ def show_about():
 """)
 
 
+# ── System Benchmark ─────────────────────────────────────────────────
+
+
+def run_benchmark():
+    section("System Benchmark")
+    info("Testing CPU, memory, and disk performance...\n         This will take about 15 seconds.\n")
+
+    # ── CPU Test ──────────────────────────────────────────────────────
+    info("CPU benchmark (prime number sieve)...")
+    limit = 200000
+    start = time.perf_counter()
+    sieve = bytearray(b'\x01') * (limit + 1)
+    sieve[0] = sieve[1] = 0
+    for i in range(2, int(limit ** 0.5) + 1):
+        if sieve[i]:
+            step = i
+            start_i = i * i
+            for j in range(start_i, limit + 1, step):
+                sieve[j] = 0
+    cpu_elapsed = time.perf_counter() - start
+    cpu_primes = sum(sieve)
+
+    # ── Memory Test ───────────────────────────────────────────────────
+    info("Memory benchmark (allocate 200 MB)...")
+    mem_size = 200 * 1024 * 1024
+    start = time.perf_counter()
+    buf = bytearray(mem_size)
+    for i in range(0, mem_size, 4096):
+        buf[i] = 1
+    mem_elapsed = time.perf_counter() - start
+    mem_speed = (mem_size / (1024 * 1024)) / mem_elapsed
+
+    # ── Disk Test ─────────────────────────────────────────────────────
+    info("Disk benchmark (write/read 100 MB temp file)...")
+    import tempfile
+    disk_size_mb = 100
+    chunk = b'\x00' * (1024 * 1024)
+    tmp = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.yfix_bench') as f:
+            tmp = f.name
+            start = time.perf_counter()
+            for _ in range(disk_size_mb):
+                f.write(chunk)
+            disk_write_elapsed = time.perf_counter() - start
+
+        with open(tmp, 'rb') as f:
+            start = time.perf_counter()
+            while f.read(1024 * 1024):
+                pass
+            disk_read_elapsed = time.perf_counter() - start
+    except Exception as e:
+        warn(f"Disk benchmark failed: {e}")
+        disk_write_elapsed = 1
+        disk_read_elapsed = 1
+    finally:
+        if tmp and os.path.exists(tmp):
+            try:
+                os.unlink(tmp)
+            except Exception:
+                pass
+
+    disk_write_speed = disk_size_mb / disk_write_elapsed if disk_write_elapsed else 0
+    disk_read_speed = disk_size_mb / disk_read_elapsed if disk_read_elapsed else 0
+
+    # ── Scoring ───────────────────────────────────────────────────────
+    cpu_score = max(0, min(1000, int(200 / max(cpu_elapsed, 0.001))))
+    mem_score = max(0, min(1000, int(mem_speed * 0.15)))
+    disk_avg = (disk_write_speed + disk_read_speed) / 2
+    disk_score = max(0, min(1000, int(disk_avg * 1.5)))
+    overall = int(cpu_score * 0.4 + mem_score * 0.3 + disk_score * 0.3)
+
+    if overall < 200:
+        rating = "Very Slow"
+    elif overall < 400:
+        rating = "Slow"
+    elif overall < 600:
+        rating = "Average"
+    elif overall < 800:
+        rating = "Fast"
+    else:
+        rating = "Very Fast"
+
+    # ── Results ───────────────────────────────────────────────────────
+    print()
+    print(f"  {'=' * 48}")
+    print(f"  {'Test':<22} {'Result':<20} {'Score':>4}")
+    print(f"  {'-' * 48}")
+    print(f"  {'CPU':<22} {cpu_primes / max(cpu_elapsed, 0.001):>12,.0f} primes/s  {cpu_score:>4}")
+    print(f"  {'Memory':<22} {mem_speed:>12,.0f} MB/s      {mem_score:>4}")
+    print(f"  {'Disk Write':<22} {disk_write_speed:>12,.1f} MB/s")
+    print(f"  {'Disk Read':<22} {disk_read_speed:>12,.1f} MB/s      {disk_score:>4}")
+    print(f"  {'-' * 48}")
+    print(f"  {'OVERALL SCORE':<22} {'':>13} {overall:>4}")
+    print(f"  {'RATING':<22} {'':>13} {rating:>4}")
+    print(f"  {'=' * 48}")
+    print()
+
+    if overall < 400:
+        warn("Your system is on the slower side. Try the fixes in this tool!")
+    elif overall < 600:
+        info("Average performance. The fixes in this tool may help slightly.")
+    else:
+        ok("Your system is performing well!")
+
+    del buf
+
+
+# ── Dry Run Toggle ────────────────────────────────────────────────────
+
+
+def toggle_dry_run():
+    global DRY_RUN
+    DRY_RUN = not DRY_RUN
+    print(f"\n  Dry-run mode is now {'ON' if DRY_RUN else 'OFF'}")
+    print("  When ON, all commands are printed but NOT executed.\n")
+
+
 # ── Menu ──────────────────────────────────────────────────────────────
 
 
@@ -1568,6 +1731,8 @@ def menu():
         ("Restore from Point",              restore_from_point),
         ("Help & Manual",                   show_help),
         ("About",                           show_about),
+        ("System Benchmark (Speed Test)",   run_benchmark),
+        ("Toggle Dry-Run Mode",             toggle_dry_run),
         ("Exit",                            None),
     ]
 
@@ -1575,7 +1740,8 @@ def menu():
         print(f"\n{'=' * 52}")
         print(f"  Yfix v{VERSION} by yohi - Windows PC Fix & Speedup Tool")
         print(f"{'=' * 52}")
-        print(f"  Admin: {'YES' if is_admin() else 'NO (limited)'}  |  {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+        dry = "  |  DRY RUN: ON" if DRY_RUN else ""
+        print(f"  Admin: {'YES' if is_admin() else 'NO (limited)'}{dry}  |  {datetime.now().strftime('%Y-%m-%d %H:%M')}")
         print(f"{'=' * 52}")
         for i, (label, _) in enumerate(items, 1):
             print(f"  {i:>2}. {label}")
@@ -1583,8 +1749,8 @@ def menu():
         print()
 
         try:
-            choice = input("  Select option (1-29): ").strip()
-            if choice in ("29", "q", "exit", "quit"):
+            choice = input("  Select option (1-31): ").strip()
+            if choice in ("31", "q", "exit", "quit"):
                 print("\n  Goodbye!")
                 break
             if choice in ("help", "h", "?"):
@@ -1622,11 +1788,19 @@ if __name__ == "__main__":
     run_as_admin()
     require_admin()
 
-    if len(sys.argv) > 1 and sys.argv[1] in ("--help", "-h", "/?"):
+    args = set(a.lower() for a in sys.argv[1:])
+
+    if args & {"--help", "-h", "/?"}:
         show_help()
         sys.exit(0)
 
-    if len(sys.argv) > 1 and sys.argv[1] in ("--quick", "-q", "/quick"):
+    if args & {"--dry-run", "-n", "/dryrun"}:
+        DRY_RUN = True
+        print(f"\n  {'!' * 52}")
+        print(f"  !! DRY RUN MODE - Commands will be shown but NOT executed !!")
+        print(f"  {'!' * 52}\n")
+
+    if args & {"--quick", "-q", "/quick"}:
         section("Quick Run Mode")
         why_slow()
         print("\nRunning cleanup...")

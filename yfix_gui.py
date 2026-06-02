@@ -34,10 +34,16 @@ class TextRedirector:
 
 
 def gui_input(prompt_text=""):
+    if yfix.DRY_RUN:
+        print(f"  [DRY-RUN] Input prompt: {prompt_text} (auto-answered)")
+        return ""
     return simpledialog.askstring("Input Required", prompt_text) or ""
 
 
 def gui_prompt_yesno(question):
+    if yfix.DRY_RUN:
+        print(f"  [DRY-RUN] Prompt: {question} (auto-answering No)")
+        return False
     return messagebox.askyesno("Confirm", question)
 
 
@@ -68,6 +74,13 @@ class R2FixGUI:
         self.admin_label = tk.Label(top, text="", font=("Segoe UI", 10))
         self.admin_label.pack(side=tk.RIGHT, padx=4)
 
+        self.dry_run_var = tk.BooleanVar(value=False)
+        self.dry_run_check = tk.Checkbutton(
+            top, text="Dry Run", variable=self.dry_run_var,
+            font=("Segoe UI", 9), command=self._toggle_dry_run
+        )
+        self.dry_run_check.pack(side=tk.RIGHT, padx=4)
+
         # ── Admin warning banner (packed only when not admin) ──
         self.admin_banner = tk.Label(
             self.root, text="  Run as Administrator for full functionality",
@@ -90,6 +103,7 @@ class R2FixGUI:
             ("Browser", 21), ("Flush DNS", 22), ("Repair Install", 23),
             ("Run ALL", 24), ("Help", 25),
             ("Restore List", 26), ("Restore Now", 27), ("About", 28),
+            ("Benchmark", 29),
         ]
 
         self.buttons = []
@@ -113,6 +127,8 @@ class R2FixGUI:
         self.progress_label.pack(side=tk.LEFT, padx=2)
         self.progress_bar = ttk.Progressbar(self.progress_frame, mode="indeterminate", length=200)
         self.progress_bar.pack(side=tk.RIGHT, padx=2)
+        self.progress_frame.pack(fill=tk.X, padx=8, pady=(0, 2))
+        self.progress_frame.pack_forget()
 
         # ── Output text area ──
         self.output = scrolledtext.ScrolledText(
@@ -141,6 +157,11 @@ class R2FixGUI:
             self.admin_banner.pack(fill=tk.X, padx=8, pady=(0, 2))
         self.root.after(5000, self.update_status)
 
+    def _toggle_dry_run(self):
+        yfix.DRY_RUN = self.dry_run_var.get()
+        with redirect_stdout(self.redirector):
+            print(f"\n  [..] Dry-run mode is now {'ON' if yfix.DRY_RUN else 'OFF'}\n")
+
     def clear_output(self):
         self.output.delete(1.0, tk.END)
 
@@ -151,7 +172,7 @@ class R2FixGUI:
         self.clear_btn.config(state=tk.DISABLED)
         self.progress_label.config(text=f"Running: {label}...")
         self.progress_bar.start(10)
-        self.progress_frame.pack(fill=tk.X, padx=8, pady=(0, 2))
+        self.progress_frame.pack(before=self.output, fill=tk.X, padx=8, pady=(0, 2))
 
     def set_idle(self):
         if not self.running:
@@ -196,6 +217,7 @@ class R2FixGUI:
             ("View Restore Points",             yfix.list_restore_points),
             ("Restore from Point",              yfix.restore_from_point),
             ("About",                           yfix.show_about),
+            ("System Benchmark (Speed Test)",   yfix.run_benchmark),
         ]
 
         if option_num < 1 or option_num > len(items):
@@ -203,34 +225,8 @@ class R2FixGUI:
 
         label, func = items[option_num - 1]
 
-        # Long-running tasks that need threading
-        long_tasks = {
-            "System File Checker (SFC)",
-            "DISM Health Restore",
-            "Malware & Virus Scan",
-            "Run ALL Automated Fixes",
-            "Disk Optimizer (Defrag/TRIM)",
-            "Clean Temporary Files",
-        }
-
         self.set_busy(label)
-        self.root.update_idletasks()
-
-        if label in long_tasks:
-            self.run_in_thread(func, label)
-        else:
-            self.run_sync(func, label)
-
-    def run_sync(self, func, label):
-        try:
-            with redirect_stdout(self.redirector):
-                func()
-                print(f"\nOK: {label} finished successfully.\n")
-        except Exception as e:
-            with redirect_stdout(self.redirector):
-                print(f"\nFAIL: {label} failed - {e}\n")
-        finally:
-            self.set_idle()
+        self.run_in_thread(func, label)
 
     def run_in_thread(self, func, label):
         def target():
