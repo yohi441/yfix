@@ -50,6 +50,27 @@ def require_admin():
         print("  Right-click -> 'Run as Administrator' for full access.\n")
 
 
+def run_as_admin():
+    """Relaunch with admin privileges via UAC prompt. Exits if UAC approved."""
+    if not is_admin():
+        try:
+            ret = ctypes.windll.shell32.ShellExecuteW(
+                None, "runas", sys.executable, " ".join(f'"{a}"' for a in sys.argv), None, 1
+            )
+            if ret > 32:
+                sys.exit(0)
+        except Exception:
+            pass
+
+
+def confirm_destructive(action_name):
+    """Prompt to create a restore point before a destructive action."""
+    print(f"\n  [!] {action_name} modifies system settings.")
+    if prompt_yesno("Create a system restore point first? (Recommended)"):
+        create_restore_point()
+    print()
+
+
 def section(title):
     print(f"\n{'=' * 52}")
     print(f"  {title}")
@@ -482,6 +503,7 @@ def privacy_tweaks():
     print("  These tweaks disable telemetry, ads, and suggestions")
     print("  that consume background resources. Safe to apply.\n")
 
+    confirm_destructive("Privacy Tweaks")
     changes = 0
 
     if prompt_yesno("Disable telemetry & data collection?"):
@@ -984,6 +1006,7 @@ def show_bloatware():
         for b in bloat:
             print(f"    {b}")
         print()
+        confirm_destructive("Bloatware Removal")
         if prompt_yesno("Attempt to remove these apps?"):
             for b in bloat:
                 if ":" in b:
@@ -1096,6 +1119,7 @@ def visual_effects_tuner():
     print("  Windows animations (transparency, shadows, animations)")
     print("  consume RAM and GPU. Disabling them speeds up old PCs.\n")
 
+    confirm_destructive("Visual Effects Tuner")
     current = run_cmd(
         'powershell -Command "(Get-ItemProperty \'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects\').VisualFXSetting"'
     ).strip()
@@ -1595,6 +1619,7 @@ def check_deps():
 if __name__ == "__main__":
     os.system("title Yfix v2.1 by yohi - Windows PC Fix & Speedup Tool" if os.name == "nt" else "")
     check_deps()
+    run_as_admin()
     require_admin()
 
     if len(sys.argv) > 1 and sys.argv[1] in ("--help", "-h", "/?"):

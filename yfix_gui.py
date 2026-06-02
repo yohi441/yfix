@@ -253,6 +253,7 @@ class R2FixGUI:
 
 def main():
     yfix.check_deps()
+    yfix.run_as_admin()
     yfix.require_admin()
 
     root = tk.Tk()

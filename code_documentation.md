@@ -75,6 +75,22 @@ The GUI never duplicates logic. Instead it:
 - **Returns:** None (prints to stdout).
 - **Requires admin:** No
 
+#### `run_as_admin()`
+- **Line:** 54
+- **Purpose:** Attempts to relaunch the current script/exe with admin privileges via a UAC prompt (`ShellExecuteW` with `"runas"` verb). If the user accepts the UAC prompt, the current process exits and the new elevated process runs. If the user cancels, execution continues with a warning.
+- **Returns:** Never returns if UAC approved (`sys.exit(0)`).
+- **Requires admin:** No (self-check)
+- **Called by:** `yfix.py` entrypoint, `yfix_gui.py` `main()`.
+
+#### `confirm_destructive(action_name)`
+- **Line:** 63
+- **Purpose:** Prints a warning that the action modifies system settings, then prompts to create a system restore point before proceeding. Called at the start of destructive functions to give the user a safety net.
+- **Args:**
+  - `action_name` (str) — display name of the action (e.g. "Privacy Tweaks", "Bloatware Removal").
+- **Returns:** None (may call `create_restore_point()` if user agrees).
+- **Requires admin:** No (but `create_restore_point()` requires admin).
+- **Called by:** `privacy_tweaks()`, `visual_effects_tuner()`, `show_bloatware()`.
+
 #### `section(title)`
 - **Line:** 53
 - **Purpose:** Prints a formatted section header. Used at the top of every feature function.
