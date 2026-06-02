@@ -1,0 +1,12 @@
+# Build output
+dist/
+*.spec
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Temp build files
+temp_dist/
